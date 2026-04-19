@@ -1,0 +1,32 @@
+1. 把 Day 1 的定时器上升为“事件模型理解”
+
+今天不是再写一个一样的 timer，而是要搞清楚这几个点：
+
+event_base 和 event 的关系
+event_new() 创建的到底是什么
+event_add() 为什么叫“加入 pending”
+event_base_dispatch() 什么时候退出
+event_base_loopexit() 和 event_base_loopbreak() 的区别
+
+也就是从“会跑 demo”升级到“看懂事件循环机制”。
+
+2. 写“周期定时器”而不是“一次性定时器”
+
+3. 比较 event_base_loopexit() 和 event_base_loopbreak()
+
+这个很适合放到 Day 2。
+
+你可以分别做两个小实验：
+
+在回调里调用 event_base_loopexit()
+在回调里调用 event_base_loopbreak()
+
+观察它们的退出时机差异。
+
+今天把这个差别搞清楚，后面写网络服务时会很有用。
+
+4. 打印当前底层后端
+
+加一行代码打印 event_base_get_method(base) 的结果，看看 Linux 下现在实际走的是不是 epoll。
+
+这一步很简单，但能帮你把“libevent 是上层封装，底层还是多路复用机制”这件事建立起来。
