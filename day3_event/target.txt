@@ -1,0 +1,6 @@
+1. 搞清楚 libevent 里常见事件类型分别在干什么
+2. 真正理解“持久事件”和“非持久事件”的区别
+3. 知道为什么事件触发一次后默认会变成 non-pending
+4. 理解 evconnlistener 是什么
+5. 看懂 accept 回调和错误回调
+6. 理解几个常见 listener flag
