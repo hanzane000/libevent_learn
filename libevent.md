@@ -148,3 +148,64 @@ libevent 官方文档就是这样描述生命周期的：事件先被 add 成为
 意思是：已经被激活了，准备执行回调，但因为它是持久事件，所以它仍然保留“继续等待下一次触发”的资格
 pending / non-pending 是“是否继续注册等待”这一维
 active / non-active 是“是否已经被触发并进入活跃队列”这一维
+
+4.21
+1、哪些代码可以看做是libevent开发的“固定套路”
+第一类是 事件循环核心的创建与释放
+event_base* base = event_base_new();
+event_base_dispatch(base);
+event_base_free(base);
+这几句是最基础的模版：先创建事件循环对象，后进入循环，最后释放资源。
+以后不管是监听socket、定时器，还是信号事件，基本都绕不开event_base
+
+第二类是 监听器的创建套路
+evconnlistener_new_bind(...)
+这是libevent写TCP服务器时常见的固定入口。
+把“创建监听socket、bind、listen、注册接受连接逻辑”这一套包装起来了。
+函数原型：
+struct evconnlistener *evconnlistener_new_bind(struct event_base *base,
+    evconnlistener_cb cb, void *ptr, unsigned flags, int backlog,
+    const struct sockaddr *sa, int socklen);
+参数：
+base：挂到哪个 event_base 事件循环上。
+cb：当有新连接到来时调用的回调函数。
+ptr：用户自定义参数，会原样传给回调里的void* arg
+flags：监听器选项，比如LEV_OPT_CLOSE_ON_FREE、LEV_OPT_REUSEABLE。
+backlog：传给listen()的监听队列长度；设为-1时，libevent会选一个合理默认值
+sa：要绑定监听的地址
+socklen：地址结构体长度
+
+evconnlistener* listener = evconnlistener_new_bind(
+    base,
+    on_accept,
+    &ctx,
+    LEV_OPT_CLOSE_ON_FREE | LEV_OPT_REUSEABLE,
+    -1,
+    reinterpret_cast<sockaddr*>(&sin),
+    sizeof(sin)
+);
+意思就是：在 base 这个事件循环上，创建一个监听 0.0.0.0:5555 的 TCP 监听器；有新连接时调用 on_accept；把 &ctx 传给回调；释放监听器时顺便关闭底层 fd，并允许地址复用。 这正是 evconnlistener_new_bind() 的典型用法。
+
+第三类是 上下文传参套路
+struct ListenerContext{
+    event_base* base;
+};
+再把&ctx传给监听器，回调里再从void* arg转回来。
+这是C风格事件库非常常见的写法：库只给你一个void* ，需要自己用结构体打包需要的数据。以后不只是 listener，很多 event/bufferevent 回调都会这么干。
+
+第四类是 错误回调注册
+evconnlistener_set_error_cb(listener, on_listener_error);
+监听器除了“接收新连接”，通常还会单独配一个“出错怎么办”的回调。这也是比较标准的写法。实际开发里，错误处理不能只靠 if(!listener) 这种初始化检查，运行时错误也要兜住。
+
+第五类是 资源释放套路
+evconnlistener_free(listener);
+event_base_free(base);
+以及连接来了以后：evutil_closesocket(fd);
+libevent 编程里，一个很重要的习惯就是：谁创建，谁释放；进入事件循环前后的资源生命周期要明确。监听器、event、bufferevent、socket 都要有对应释放动作。
+
+2、static_cast 和 reinterpret_cast
+auto* ctx = static_cast<ListenerContext*>(arg);
+把无类型指针恢复成原来的真实类型
+auto* sin = reinterpret_cast<sockaddr_in*>(addr);
+把同一块地址按另一种结构布局来解释
+static_cast 更像“在已有类型体系内做合理、受约束的转换”；reinterpret_cast 更像“把同一块内存地址按另一种类型强行解释”。

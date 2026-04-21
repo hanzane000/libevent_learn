@@ -23,15 +23,19 @@ void on_accept(struct evconnlistener* listener,
     
     (void)listener;
     (void)socklen;
-    (void)arg;
+    (void)arg;      // 把没用到的参数显式标记掉
 
     char ip[INET6_ADDRSTRLEN] = {0};
-    int port = 0;
+    int port = 0;   // 准备两个变量，用来保存客户端地址信息：
 
+    // 判断客户端到底是 IPv4 还是 IPv6，然后分别解析：
     if(addr->sa_family == AF_INET){
+        // 把“通用地址指针” sockaddr*，当成“IPv4 专用地址指针” sockaddr_in* 来看
+        // 为什么用reinterpret_cast 因为这是在做指针类型重解释。
+        // 这不是普通的“父子类转换”，也不是数值转换，而是：把一块内存地址按另一种结构类型来解释。
         auto* sin = reinterpret_cast<sockaddr_in*>(addr);
-        inet_ntop(AF_INET, &(sin->sin_addr), ip, sizeof(ip));
-        port = ntohs(sin->sin_port);
+        inet_ntop(AF_INET, &(sin->sin_addr), ip, sizeof(ip));   // 把二进制网络地址转成可读字符串
+        port = ntohs(sin->sin_port);    // 把网络字节序端口转成主机字节序整数
     }
     else if(addr->sa_family == AF_INET6){
         auto* sin6 = reinterpret_cast<sockaddr_in6*>(addr);
