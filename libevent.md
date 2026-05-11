@@ -209,3 +209,48 @@ auto* ctx = static_cast<ListenerContext*>(arg);
 auto* sin = reinterpret_cast<sockaddr_in*>(addr);
 把同一块地址按另一种结构布局来解释
 static_cast 更像“在已有类型体系内做合理、受约束的转换”；reinterpret_cast 更像“把同一块内存地址按另一种类型强行解释”。
+
+4.22
+1、evconnlistener_new_bind()的功能
+“让 libevent 帮我创建一个监听器，并绑定到某个地址；以后只要有新连接，就回调我指定的函数。”
+struct evconnlistener* evconnlistener_new_bind(
+    struct event_base* base,
+    evconnlistener_cb cb,
+    void* ptr,
+    unsigned flags,
+    int backlog,
+    const struct sockaddr* sa,
+    int socklen
+)
+官方定义：在给定的地址上创建一个evconnlistener，用于监听传入的TCP连接。和evconnlistener_new()的区别是：new_bind()由libevent自己创建并绑定监听socket；new()则要求自己先准备好一个已经绑定好的socket fd再交给它。
+evconnlistener_new_bind() 用来在指定地址上创建 libevent 监听器。base 指定归属的事件循环，cb 指定新连接到来时的回调函数，ptr 是透传给回调的用户上下文，flags 控制监听器行为，backlog 控制待 accept 连接队列长度，sa 和 socklen 指定监听地址及其长度。常见入门写法是 LEV_OPT_CLOSE_ON_FREE | LEV_OPT_REUSEABLE 加 backlog = -1。
+
+2、bufferevent_socket_new
+bufferevent* bev = bufferevent_socket_new(server_ctx->base, fd, BEV_OPT_CLOSE_ON_FREE); 
+把一个“裸的 socket fd”包装成一个 libevent 能管理的“连接对象”。
+在 server_ctx->base 这个事件循环上，基于刚刚 accept 到的这个客户端 socket fd，创建一个 socket 类型的 bufferevent；并且设置为“以后释放 bev 时，顺便把这个 socket 也关掉”。
+
+bufferevent的意义就是：libevent帮你把“socket + 读缓冲 + 写缓冲 + 读写事件管理”打包成一个对象
+
+3、void bufferevent_setcb
+void bufferevent_setcb(struct bufferevent *bufev,
+                       bufferevent_data_cb readcb,
+                       bufferevent_data_cb writecb,
+                       bufferevent_event_cb eventcb,
+                       void *cbarg);
+
+
+3.23
+1、event bufferevent buffer这几个概念有什么区别
+event 管“发生了什么事”，bufferevent 管“一个连接怎么收发数据”，evbuffer 管“数据本身放在哪里”。
+event_base
+   └── event          // 基础事件
+   └── bufferevent    // 更高级的连接事件封装
+           ├── input  -> evbuffer
+           └── output -> evbuffer
+
+event 是基础事件机制
+bufferevent 是建立在事件机制上的高级封装
+evbuffer 是 bufferevent 里面真正装数据的缓冲区
+
+event 是事件通知机制，负责监视“事情是否发生”；bufferevent 是面向连接的高级 I/O 封装，负责管理 socket 的读写和回调；evbuffer 是数据缓冲区，负责保存收到的数据和待发送的数据。
